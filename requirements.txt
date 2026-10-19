@@ -1,5 +1,5 @@
-streamlit
-tensorflow==2.15.0
-tf-keras==2.15.0
-pillow
+﻿tensorflow>=2.16.0
+keras>=3.0.0
 numpy
+streamlit
+pillow
