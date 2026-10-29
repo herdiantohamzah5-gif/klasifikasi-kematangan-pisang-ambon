@@ -1,4 +1,3 @@
-
 import json
 import hashlib
 import time
@@ -23,9 +22,14 @@ st.set_page_config(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-MODEL_PATH = BASE_DIR / "models" / "banana_mobilenetv2.keras"
+MODEL_PATH = BASE_DIR / "models" / "banana_model.keras"
 LABEL_PATH = BASE_DIR / "models" / "class_names.json"
 IMAGE_SIZE = (224, 224)
+
+# FITUR BARU: keranjang pisang disimpan sementara selama sesi Streamlit.
+for basket_key in ("basket_ripe", "basket_unripe", "basket_rotten"):
+    if basket_key not in st.session_state:
+        st.session_state[basket_key] = 0
 
 st.markdown(
     """
@@ -1107,6 +1111,107 @@ else:
                 "bukan jaminan kondisi buah."
             )
 
+    # ==========================================
+    # KERANJANG PISANG
+    # ==========================================
+    st.divider()
+    st.header("🧺 Keranjang Pisang")
+    st.markdown(
+        '<div class="section-subtitle">'
+        'Hasil klasifikasi hanya dihitung setelah kamu menekan ' 
+        '<b>Tambahkan ke Keranjang</b>.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    ripe_count = int(st.session_state["basket_ripe"])
+    unripe_count = int(st.session_state["basket_unripe"])
+    rotten_count = int(st.session_state["basket_rotten"])
+    total_count = ripe_count + unripe_count + rotten_count
+
+    basket_notice = st.session_state.pop("basket_notice", None)
+    if basket_notice:
+        st.success(basket_notice)
+
+    basket1, basket2, basket3, basket4 = st.columns(4)
+    with basket1:
+        st.metric("🍌 Ripe Basket", ripe_count, help="Jumlah pisang matang yang dikonfirmasi.")
+    with basket2:
+        st.metric("🌱 Unripe Basket", unripe_count, help="Jumlah pisang mentah yang dikonfirmasi.")
+    with basket3:
+        st.metric("⚠️ Rotten Basket", rotten_count, help="Jumlah pisang busuk yang dikonfirmasi.")
+    with basket4:
+        st.metric("📦 Total Pisang", total_count)
+
+    # Hanya izinkan menambah hasil klasifikasi terbaru yang valid.
+    cart_result = st.session_state.get("prediction_result")
+    cart_object_check = st.session_state.get("object_check_result")
+    cart_result_is_current = (
+        current_result_key is not None
+        and st.session_state.get("result_image_key") == current_result_key
+        and cart_result is not None
+        and cart_object_check is not None
+        and cart_object_check.get("is_banana", False)
+    )
+
+    if cart_result_is_current:
+        cart_label = str(cart_result.get("class", "")).strip()
+        cart_info = CATEGORY_INFO.get(cart_label)
+        if cart_info:
+            st.info(f"Hasil terakhir yang siap dikonfirmasi: **{cart_label} — {cart_info['title']}**")
+        else:
+            st.warning("Label hasil prediksi tidak dikenali. Periksa class_names.json.")
+    else:
+        st.caption("Lakukan analisis gambar pisang yang berhasil terlebih dahulu untuk mengaktifkan tombol tambah.")
+
+    cart_label = (
+        str(cart_result.get("class", "")).strip()
+        if cart_result is not None
+        else ""
+    )
+    cart_label_valid = cart_label in CATEGORY_INFO
+
+    add_col, reset_col = st.columns(2)
+    with add_col:
+        add_to_basket = st.button(
+            "➕ Tambahkan ke Keranjang",
+            type="primary",
+            width="stretch",
+            disabled=not cart_result_is_current or not cart_label_valid,
+            key="add_banana_to_basket",
+        )
+    with reset_col:
+        reset_basket = st.button(
+            "🔄 Reset Keranjang",
+            width="stretch",
+            key="reset_banana_basket",
+        )
+
+    if add_to_basket and cart_result_is_current:
+        label_to_add = str(cart_result.get("class", "")).strip()
+        basket_key_by_label = {
+            "Ripe": "basket_ripe",
+            "Unripe": "basket_unripe",
+            "Rotten": "basket_rotten",
+        }
+        basket_key = basket_key_by_label.get(label_to_add)
+        if basket_key is not None:
+            st.session_state[basket_key] += 1
+            st.session_state["basket_notice"] = (
+                f"{label_to_add} berhasil ditambahkan ke keranjang."
+            )
+            st.rerun()
+
+    if reset_basket:
+        st.session_state["basket_ripe"] = 0
+        st.session_state["basket_unripe"] = 0
+        st.session_state["basket_rotten"] = 0
+        st.session_state["basket_notice"] = (
+            "Semua jumlah keranjang berhasil direset."
+        )
+        st.rerun()
+
+
     st.divider()
     st.subheader("Fitur Aplikasi")
 
@@ -1156,7 +1261,7 @@ else:
             unsafe_allow_html=True,
         )
 
-st.markdown(
+st.markdown(    
     """
     <div class="footer">
         AI Fruit Scanner · MobileNetV2 · Proyek Kecerdasan Buatan
